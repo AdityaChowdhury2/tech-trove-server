@@ -6,6 +6,7 @@ require('dotenv').config();
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken')
 const port = process.env.PORT || 5000;
+const stripe = require('stripe')(process.env.PAYMENT_SECRET)
 
 app.use(cors({
     origin: [process.env.LOCAL_CLIENT, process.env.CLIENT],
@@ -44,30 +45,59 @@ async function run() {
 run().catch(console.dir);
 
 const usersCollection = client.db('techTroveDb').collection('users')
+const paymentsCollection = client.db('techTroveDb').collection('payments')
 
 // save or modify user email and role in db
 app.put('/api/v1/users/:email', async (req, res) => {
     try {
         const email = req.params.email
         const user = req.body;
+        const subscribed = !!user?.subscribed;
         const query = { email };
         const options = { upsert: true };
         const isExist = await usersCollection.findOne(query)
         console.log('USER FOUND => ', isExist);
-        if (isExist) return res.send(isExist)
+        if (isExist) {
+            if (subscribed && !isExist.subscribed) {
+                const result = await usersCollection.updateOne(query, {
+                    $set: {
+                        ...isExist,
+                        subscribed
+                    }
+                })
+                return res.send(result);
+            }
+            else {
+                return res.send(isExist)
+            }
+        }
         const updateDoc = {
             $set: {
                 ...user,
                 role: 'guest',
-                subscribed: false,
+                subscribed,
                 timestamp: Date.now(),
             }
         }
+        console.log(updateDoc);
         const result = await usersCollection.updateOne(query, updateDoc, options);
         res.send(result)
     } catch (error) {
         res.status(500).send(error.message)
     }
+})
+
+// create a payment intent 
+app.post('/api/v1/create-payment-intent', async (req, res) => {
+    const { price } = req.body;
+    const amount = parseInt(price * 100);
+    if (!price || amount < 1) return res.status(500).send({ message: "Invalid payment intent" })
+    const { client_secret } = await stripe.paymentIntents.create({
+        amount,
+        currency: 'usd',
+        payment_method_types: ['card'],
+    })
+    res.send({ clientSecret: client_secret })
 })
 
 // token creation
@@ -87,6 +117,17 @@ app.post('/api/v1/create-token', async (req, res) => {
             .send({ success: true })
     } catch (err) {
         res.status(500).send(err)
+    }
+})
+
+app.post('/api/v1/payment', async (req, res) => {
+    try {
+        const paymentDetails = req.body;
+        paymentDetails.timestamp = date.now();
+        const result = await paymentsCollection.insertOne(paymentDetails);
+        res.send(result)
+    } catch (error) {
+        res.status(500).send(error)
     }
 })
 
