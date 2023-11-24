@@ -87,6 +87,29 @@ app.put('/api/v1/users/:email', async (req, res) => {
     }
 })
 
+// get user data by email
+app.get('/api/v1/user/:email', async (req, res) => {
+    try {
+        const query = req.params;
+        const result = await usersCollection.findOne(query);
+        res.send(result);
+    } catch (error) {
+        res.status(500).send(error.message)
+    }
+})
+
+// payment information to db
+app.post('/api/v1/payment', async (req, res) => {
+    try {
+        const paymentDetails = req.body;
+        const result = await paymentsCollection.insertOne(paymentDetails);
+        res.send(result)
+    } catch (error) {
+        res.status(500).send(error.message)
+    }
+})
+
+
 // create a payment intent 
 app.post('/api/v1/create-payment-intent', async (req, res) => {
     const { price } = req.body;
@@ -120,16 +143,6 @@ app.post('/api/v1/create-token', async (req, res) => {
     }
 })
 
-app.post('/api/v1/payment', async (req, res) => {
-    try {
-        const paymentDetails = req.body;
-        paymentDetails.timestamp = date.now();
-        const result = await paymentsCollection.insertOne(paymentDetails);
-        res.send(result)
-    } catch (error) {
-        res.status(500).send(error)
-    }
-})
 
 // delete cookie
 app.post('/api/v1/delete-token', async (req, res) => {
