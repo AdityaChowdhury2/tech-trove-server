@@ -87,6 +87,20 @@ app.put('/api/v1/users/:email', async (req, res) => {
     }
 })
 
+// user role update
+app.patch('/api/v1/users/:email', async (req, res) => {
+    const filter = req.params;
+    const role = req.body.role;
+    const updateDoc = {
+        $set: {
+            role
+        }
+    }
+    const result = await usersCollection.updateOne(filter, updateDoc);
+    res.send(result);
+
+})
+
 // get user data by email
 app.get('/api/v1/user/:email', async (req, res) => {
     try {
@@ -94,7 +108,18 @@ app.get('/api/v1/user/:email', async (req, res) => {
         const result = await usersCollection.findOne(query);
         res.send(result);
     } catch (error) {
+        console.log(error.message);
         res.status(500).send(error.message)
+    }
+})
+
+// get all users 
+app.get('/api/v1/users', async (req, res) => {
+    try {
+        const result = await usersCollection.find().toArray();
+        res.send(result);
+    } catch (error) {
+
     }
 })
 
