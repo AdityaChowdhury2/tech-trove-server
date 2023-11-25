@@ -62,7 +62,9 @@ const verifyToken = async (req, res, next) => {
 }
 
 const usersCollection = client.db('techTroveDb').collection('users')
+const productsCollection = client.db('techTroveDb').collection('products')
 const paymentsCollection = client.db('techTroveDb').collection('payments')
+const votesCollection = client.db('techTroveDb').collection('votes')
 
 
 const verifyAdmin = async (req, res, next) => {
@@ -74,7 +76,7 @@ const verifyAdmin = async (req, res, next) => {
         if (user?.role === 'admin')
             next();
         else {
-            return res.status(401).send({ message: 'unauthorized Access' })
+            return res.status(403).send({ message: 'Forbidden Access' })
         }
     } catch (error) {
 
@@ -122,18 +124,52 @@ app.put('/api/v1/users/:email', async (req, res) => {
     }
 })
 
+// get Products 
+app.get('/api/v1/products', async (req, res) => {
+    const featured = req.query?.featured;
+    const sortBy = req.query?.sortBy;
+    const sortingOrder = req.query?.sortOrder;
+    const search = req.query?.search;
+    const page = req.query?.page
+    let skip = 0;
+    if (page) {
+        skip = page * 20;
+    }
+    const query = {}
+    const sort = {};
+    let limit = 20;
+    if (sortBy && sortingOrder) {
+        sort[sortBy] = sortingOrder === 'desc' ? -1 : 1;
+        limit = 6
+    }
+    if (search) {
+        query.tags = { $regex: search, $options: "i" }
+    }
+    if (featured) {
+        query.featured = !!featured
+        limit = 4
+    }
+
+    const result = await productsCollection.find(query).skip(skip).sort(sort).limit(limit).toArray();
+    const total = await productsCollection.countDocuments(query);
+    res.send({ result, total })
+})
+
 // user role update
 app.patch('/api/v1/users/:email', verifyToken, async (req, res) => {
-    const filter = req.params;
-    const role = req.body.role;
-    const updateDoc = {
-        $set: {
-            role
+    try {
+        const filter = req.params;
+        const role = req.body.role;
+        const updateDoc = {
+            $set: {
+                role
+            }
         }
-    }
-    const result = await usersCollection.updateOne(filter, updateDoc);
-    res.send(result);
+        const result = await usersCollection.updateOne(filter, updateDoc);
+        res.send(result);
+    } catch (error) {
 
+    }
 })
 
 // get user data by email
@@ -157,6 +193,27 @@ app.get('/api/v1/users', verifyToken, verifyAdmin, async (req, res) => {
 
     }
 })
+
+// create a vote document for the user
+// app.post('/api/v1/votes', async (req, res) => {
+//     try {
+//         const vote = req.body;
+//         const result = await votesCollection.insertOne(vote);
+//         res.send(result);
+//     } catch (error) {
+
+//     }
+// })
+
+// app.get('/api/v1/votes/:productId', async (req, res) => {
+//     try {
+//         const productId = req.params.productId
+//         const query = { productId };
+
+//     } catch (error) {
+
+//     }
+// })
 
 // payment information to db
 app.post('/api/v1/payment', async (req, res) => {
