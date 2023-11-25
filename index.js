@@ -44,8 +44,43 @@ async function run() {
 }
 run().catch(console.dir);
 
+
+const verifyToken = async (req, res, next) => {
+    const token = req.cookies?.token;
+    if (!token) {
+        return res.status(401).send({ message: 'Unauthorized Access' })
+    }
+    console.log(" token ", token, " from ", req.url);
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err)
+            return res.status(401).send({ message: 'Unauthorized Access' })
+        console.log('Verified token: ' + decoded.email);
+        req.user = decoded
+        next();
+
+    })
+}
+
 const usersCollection = client.db('techTroveDb').collection('users')
 const paymentsCollection = client.db('techTroveDb').collection('payments')
+
+
+const verifyAdmin = async (req, res, next) => {
+    try {
+        const { email } = req.user;
+        const filter = { email };
+        const user = await usersCollection.findOne(filter)
+        console.log(user);
+        if (user?.role === 'admin')
+            next();
+        else {
+            return res.status(401).send({ message: 'unauthorized Access' })
+        }
+    } catch (error) {
+
+    }
+}
+
 
 // save or modify user email and role in db
 app.put('/api/v1/users/:email', async (req, res) => {
@@ -88,7 +123,7 @@ app.put('/api/v1/users/:email', async (req, res) => {
 })
 
 // user role update
-app.patch('/api/v1/users/:email', async (req, res) => {
+app.patch('/api/v1/users/:email', verifyToken, async (req, res) => {
     const filter = req.params;
     const role = req.body.role;
     const updateDoc = {
@@ -114,7 +149,7 @@ app.get('/api/v1/user/:email', async (req, res) => {
 })
 
 // get all users 
-app.get('/api/v1/users', async (req, res) => {
+app.get('/api/v1/users', verifyToken, verifyAdmin, async (req, res) => {
     try {
         const result = await usersCollection.find().toArray();
         res.send(result);
