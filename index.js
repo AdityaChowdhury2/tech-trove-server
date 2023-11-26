@@ -177,9 +177,20 @@ app.get('/api/v1/products', async (req, res) => {
     const total = await productsCollection.countDocuments(query);
     res.send({ result, total })
 })
+// post a product
+app.post('/api/v1/products/add-product', verifyToken, async (req, res) => {
+    try {
+        const product = req.body;
+        product.status = 'pending'
+        const result = await productsCollection.insertOne(product);
+        res.send(result);
+    } catch (error) {
+
+    }
+})
 
 // get Products by email
-app.get('/api/v1/user/products/:email', async (req, res) => {
+app.get('/api/v1/user/products/:email', verifyToken, async (req, res) => {
     try {
         const email = req.params.email;
         console.log(email);
@@ -192,6 +203,37 @@ app.get('/api/v1/user/products/:email', async (req, res) => {
 
     }
 })
+
+// update product by productId by user
+app.patch('/api/v1/user/products/:productId', verifyToken, async (req, res) => {
+    try {
+        const productId = req.params.productId;
+        const query = { _id: new ObjectId(productId) }
+        const product = req.body;
+        const updatedProduct = {
+            $set: {
+                ...product,
+                status: 'pending',
+            }
+        }
+        const result = await productsCollection.updateOne(query, updatedProduct);
+        res.send(result);
+    } catch (error) {
+        console.log(error);
+    }
+})
+
+app.delete('/api/v1/user/products/:productId', verifyToken, async (req, res) => {
+    try {
+        const productId = req.params.productId;
+        const query = { _id: new ObjectId(productId) }
+        const result = await productsCollection.deleteOne(query);
+        res.send(result);
+    } catch (error) {
+
+    }
+})
+
 
 // get single product
 app.get('/api/v1/products/:id', async (req, res) => {
@@ -306,6 +348,16 @@ app.post('/api/v1/payment', async (req, res) => {
     }
 })
 
+app.get('/api/v1/payment/:email', async (req, res) => {
+    try {
+        const email = req.params.email;
+        const query = { email };
+        const result = await paymentsCollection.findOne(query);
+        console.log(result);
+    } catch (error) {
+
+    }
+})
 
 // create a payment intent 
 app.post('/api/v1/create-payment-intent', async (req, res) => {
@@ -357,19 +409,6 @@ app.post('/api/v1/delete-token', async (req, res) => {
     }
 })
 
-// post a product
-app.post('/api/v1/products/add-product', verifyToken, async (req, res) => {
-    try {
-        const product = req.body;
-        product.status = 'pending'
-        const result = await productsCollection.insertOne(product);
-        res.send(result);
-    } catch (error) {
-
-    }
-})
-
-// get a product by email
 
 
 
