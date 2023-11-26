@@ -66,6 +66,7 @@ const productsCollection = client.db('techTroveDb').collection('products')
 const paymentsCollection = client.db('techTroveDb').collection('payments')
 const votesCollection = client.db('techTroveDb').collection('votes')
 const reviewsCollection = client.db('techTroveDb').collection('reviews')
+const reportsCollection = client.db('techTroveDb').collection('reports')
 
 
 const verifyAdmin = async (req, res, next) => {
@@ -271,6 +272,9 @@ app.patch('/api/v1/moderator/products/:productId', verifyToken, verifyModerator,
         updateDoc.featured = !!featured;
     } if (status) {
         updateDoc.status = status;
+        if (status === "accepted") {
+            updateDoc.timestamp = Date.now();
+        }
     }
     console.log(updateDoc);
     const updatedDoc = {
@@ -329,7 +333,9 @@ app.patch('/api/v1/users/:email', verifyToken, verifyAdmin, async (req, res) => 
 app.get('/api/v1/user/:email', async (req, res) => {
     try {
         const query = req.params;
+        console.log(query);
         const result = await usersCollection.findOne(query);
+        console.log("result found ", result);
         res.send(result);
     } catch (error) {
         console.log(error.message);
@@ -342,6 +348,51 @@ app.get('/api/v1/users', verifyToken, verifyAdmin, async (req, res) => {
     try {
         const result = await usersCollection.find().toArray();
         res.send(result);
+    } catch (error) {
+
+    }
+})
+
+app.post('/api/v1/users/reports', verifyToken, async (req, res) => {
+    try {
+        const data = req.body;
+        const result = await reportsCollection.insertOne(data);
+        res.send(result);
+    } catch (error) {
+
+    }
+})
+
+app.get('/api/v1/reports', verifyToken, async (req, res) => {
+    try {
+        const productId = req.query?.productId;
+        const reportedBy = req.query?.reportBy;
+        const query = {}
+        if (reportedBy && req.user?.email !== reportedBy) {
+            res.status(403).send({ message: 'Forbidden access' })
+        }
+        if (productId && reportedBy) {
+            query.email = reportedBy
+            query.productId = productId
+        }
+        console.log(query);
+        const result = await reportsCollection.find(query).toArray();
+        console.log("result ", result);
+        res.send(result);
+
+
+    } catch (error) {
+        console.log(error);
+    }
+})
+
+app.delete('/api/v1/reports/:productId', async (req, res) => {
+    try {
+        const filter = { productId: req.params.productId }
+        const result = await reportsCollection.deleteMany(filter);
+        console.log(result);
+        res.send(result)
+
     } catch (error) {
 
     }
@@ -379,6 +430,7 @@ app.post('/api/v1/payment', async (req, res) => {
     }
 })
 
+// get payment information by email address
 app.get('/api/v1/payment/:email', async (req, res) => {
     try {
         const email = req.params.email;
