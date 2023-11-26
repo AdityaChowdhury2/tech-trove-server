@@ -1,6 +1,6 @@
 const express = require('express');
 const app = express();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
 require('dotenv').config();
 const cookieParser = require('cookie-parser');
@@ -65,6 +65,7 @@ const usersCollection = client.db('techTroveDb').collection('users')
 const productsCollection = client.db('techTroveDb').collection('products')
 const paymentsCollection = client.db('techTroveDb').collection('payments')
 const votesCollection = client.db('techTroveDb').collection('votes')
+const reviewsCollection = client.db('techTroveDb').collection('reviews')
 
 
 const verifyAdmin = async (req, res, next) => {
@@ -74,6 +75,22 @@ const verifyAdmin = async (req, res, next) => {
         const user = await usersCollection.findOne(filter)
         console.log(user);
         if (user?.role === 'admin')
+            next();
+        else {
+            return res.status(403).send({ message: 'Forbidden Access' })
+        }
+    } catch (error) {
+
+    }
+}
+
+const verifyModerator = async (req, res, next) => {
+    try {
+        const { email } = req.user;
+        const filter = { email };
+        const user = await usersCollection.findOne(filter)
+        console.log(user);
+        if (user?.role === 'moderator')
             next();
         else {
             return res.status(403).send({ message: 'Forbidden Access' })
@@ -124,20 +141,26 @@ app.put('/api/v1/users/:email', async (req, res) => {
     }
 })
 
-// get Products 
+// get Products for normal users
 app.get('/api/v1/products', async (req, res) => {
     const featured = req.query?.featured;
     const sortBy = req.query?.sortBy;
     const sortingOrder = req.query?.sortOrder;
     const search = req.query?.search;
     const page = req.query?.page
+
+    const sort = {};
+    let limit = 20;
+
     let skip = 0;
     if (page) {
         skip = page * 20;
     }
-    const query = {}
-    const sort = {};
-    let limit = 20;
+    const query = {
+        status: 'accepted'
+    }
+
+
     if (sortBy && sortingOrder) {
         sort[sortBy] = sortingOrder === 'desc' ? -1 : 1;
         limit = 6
@@ -155,8 +178,65 @@ app.get('/api/v1/products', async (req, res) => {
     res.send({ result, total })
 })
 
+// get Products by email
+app.get('/api/v1/user/products/:email', async (req, res) => {
+    try {
+        const email = req.params.email;
+        console.log(email);
+        const query = {
+            'owner.email': email
+        }
+        const result = await productsCollection.find(query).toArray();
+        res.send(result);
+    } catch (error) {
+
+    }
+})
+
+// get single product
+app.get('/api/v1/products/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const query = {
+            _id: new ObjectId(id),
+        }
+        const result = await productsCollection.findOne(query);
+        res.send(result);
+    } catch (error) {
+
+    }
+})
+// get all products moderator api
+
+app.get('/api/v1/products', async (req, res) => { })
+
+
+// add a review of a product
+app.post('/api/v1/reviews', async (req, res) => {
+    try {
+        const review = req.body;
+        review.timestamp = new Date().toISOString();
+        const result = await reviewsCollection.insertOne(review);
+        res.send(result);
+    } catch (error) {
+
+    }
+})
+
+// get reviews by product id
+app.get('/api/v1/reviews/:productId', async (req, res) => {
+    try {
+        const productId = req.params.productId;
+        const filter = { productId };
+        const result = await reviewsCollection.find(filter).toArray();
+        res.send(result)
+    } catch (error) {
+
+    }
+})
+
 // user role update
-app.patch('/api/v1/users/:email', verifyToken, async (req, res) => {
+app.patch('/api/v1/users/:email', verifyToken, verifyAdmin, async (req, res) => {
     try {
         const filter = req.params;
         const role = req.body.role;
@@ -276,6 +356,20 @@ app.post('/api/v1/delete-token', async (req, res) => {
         res.status(500).send(err)
     }
 })
+
+// post a product
+app.post('/api/v1/products/add-product', verifyToken, async (req, res) => {
+    try {
+        const product = req.body;
+        product.status = 'pending'
+        const result = await productsCollection.insertOne(product);
+        res.send(result);
+    } catch (error) {
+
+    }
+})
+
+// get a product by email
 
 
 
