@@ -50,7 +50,7 @@ const verifyToken = async (req, res, next) => {
     if (!token) {
         return res.status(401).send({ message: 'Unauthorized Access' })
     }
-    console.log(" token ", token, " from ", req.url);
+    console.log("Request from ", req.url);
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
         if (err)
             return res.status(401).send({ message: 'Unauthorized Access' })
@@ -89,9 +89,10 @@ const verifyModerator = async (req, res, next) => {
         const { email } = req.user;
         const filter = { email };
         const user = await usersCollection.findOne(filter)
-        console.log(user);
-        if (user?.role === 'moderator')
+        if (user?.role === 'moderator') {
+            console.log("Found user role is moderator ====> ", email);
             next();
+        }
         else {
             return res.status(403).send({ message: 'Forbidden Access' })
         }
@@ -250,7 +251,37 @@ app.get('/api/v1/products/:id', async (req, res) => {
 })
 // get all products moderator api
 
-app.get('/api/v1/products', async (req, res) => { })
+app.get('/api/v1/moderator/products', verifyToken, verifyModerator, async (req, res) => {
+    try {
+        const result = await productsCollection.find().toArray();
+        res.send(result);
+    } catch (error) {
+
+    }
+})
+
+// update product info by moderator
+app.patch('/api/v1/moderator/products/:productId', verifyToken, verifyModerator, async (req, res) => {
+    const id = req.params.productId;
+    const featured = req.body?.featured;
+    const status = req.body?.status;
+    const updateDoc = {};
+    console.log(featured);
+    if (featured) {
+        updateDoc.featured = !!featured;
+    } if (status) {
+        updateDoc.status = status;
+    }
+    console.log(updateDoc);
+    const updatedDoc = {
+        $set: {
+            ...updateDoc,
+        }
+    }
+    const filter = { _id: new ObjectId(id) }
+    const result = await productsCollection.updateOne(filter, updatedDoc)
+    res.send(result)
+})
 
 
 // add a review of a product
@@ -306,7 +337,7 @@ app.get('/api/v1/user/:email', async (req, res) => {
     }
 })
 
-// get all users 
+// get all users admin
 app.get('/api/v1/users', verifyToken, verifyAdmin, async (req, res) => {
     try {
         const result = await usersCollection.find().toArray();
