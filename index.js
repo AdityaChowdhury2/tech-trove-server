@@ -67,6 +67,7 @@ const paymentsCollection = client.db('techTroveDb').collection('payments')
 const votesCollection = client.db('techTroveDb').collection('votes')
 const reviewsCollection = client.db('techTroveDb').collection('reviews')
 const reportsCollection = client.db('techTroveDb').collection('reports')
+const couponsCollection = client.db('techTroveDb').collection('coupons')
 
 
 const verifyAdmin = async (req, res, next) => {
@@ -139,6 +140,7 @@ app.put('/api/v1/users/:email', async (req, res) => {
         const result = await usersCollection.updateOne(query, updateDoc, options);
         res.send(result)
     } catch (error) {
+        console.log(error);
         res.status(500).send(error.message)
     }
 })
@@ -190,6 +192,8 @@ app.post('/api/v1/products/add-product', verifyToken, async (req, res) => {
 
     }
 })
+
+
 
 // get Products by email
 app.get('/api/v1/user/products/:email', verifyToken, async (req, res) => {
@@ -254,8 +258,34 @@ app.get('/api/v1/products/:id', async (req, res) => {
 
 app.get('/api/v1/moderator/products', verifyToken, verifyModerator, async (req, res) => {
     try {
-        const result = await productsCollection.find().toArray();
-        res.send(result);
+        // const result = await productsCollection.find().sort({ status:  }).toArray();
+        // res.send(result);
+        const result = await productsCollection.aggregate([
+            {
+                $addFields: {
+                    sortOrder: {
+                        $switch: {
+                            branches: [
+                                {
+                                    case: { $eq: ["$status", 'pending'] }, then: 1
+                                },
+                                {
+                                    case: { $eq: ["$status", "accepted"] }, then: 2
+                                },
+                            ],
+                            default: 3
+                        }
+                    }
+                }
+            },
+            {
+                $sort: { sortOrder: 1 },
+            },
+            {
+                $project: { sortOrder: 0 }
+            }
+        ]).toArray();
+        res.send(result)
     } catch (error) {
 
     }
@@ -330,7 +360,7 @@ app.patch('/api/v1/users/:email', verifyToken, verifyAdmin, async (req, res) => 
 })
 
 // get user data by email
-app.get('/api/v1/user/:email', async (req, res) => {
+app.get('/api/v1/user/:email', verifyToken, async (req, res) => {
     try {
         const query = req.params;
         console.log(query);
@@ -435,6 +465,7 @@ app.get('/api/v1/payment/:email', async (req, res) => {
     try {
         const email = req.params.email;
         const query = { email };
+        console.log(query);
         const result = await paymentsCollection.findOne(query);
         console.log(result);
     } catch (error) {
@@ -444,15 +475,91 @@ app.get('/api/v1/payment/:email', async (req, res) => {
 
 // create a payment intent 
 app.post('/api/v1/create-payment-intent', async (req, res) => {
-    const { price } = req.body;
-    const amount = parseInt(price * 100);
-    if (!price || amount < 1) return res.status(500).send({ message: "Invalid payment intent" })
-    const { client_secret } = await stripe.paymentIntents.create({
-        amount,
-        currency: 'usd',
-        payment_method_types: ['card'],
-    })
-    res.send({ clientSecret: client_secret })
+    try {
+        const { price } = req.body;
+        const amount = parseInt(price * 100);
+        if (!price || amount < 1) return res.status(500).send({ message: "Invalid payment intent" })
+        const { client_secret } = await stripe.paymentIntents.create({
+            amount,
+            currency: 'usd',
+            payment_method_types: ['card'],
+        })
+        res.send({ clientSecret: client_secret })
+    } catch (error) {
+        res.status(500).send({ message: 'Internal Server error' })
+    }
+})
+
+// coupon apis
+
+app.put('/api/v1/coupons/:code', verifyToken, verifyAdmin, async (req, res) => {
+    const couponData = req.body;
+    const query = {
+        code: req.params?.code
+    }
+    const options = {
+        upsert: true,
+    }
+    const updateDoc = {
+        $set: {
+            ...couponData,
+        }
+    }
+
+    const result = await couponsCollection.updateOne(query, updateDoc, options);
+    res.send(result)
+})
+
+app.get('/api/v1/coupons', async (req, res) => {
+    try {
+        const result = await couponsCollection.aggregate([
+            {
+                $addFields: {
+                    isValid: {
+                        $cond: { if: { $gt: [{ $toDate: "$expiryDate" }, new Date()] }, then: true, else: false }
+                    }
+                }
+            }
+        ]).toArray();
+        res.send(result);
+    } catch (error) {
+
+    }
+})
+app.get('/api/v1/coupons/:code', async (req, res) => {
+    const code = req.params.code;
+    const query = { code };
+    const couponData = {};
+    const coupon = await couponsCollection.findOne(query);
+    // coupon is not valid
+    if (!coupon) {
+        couponData.valid = false;
+        couponData.message = "Invalid coupon code"
+    }
+    else {
+        if (coupon.expire < new Date()) {
+            couponData.valid = false;
+            couponData.message = "Expired coupon code"
+        }
+        else {
+            couponData.valid = true;
+            couponData.message = "Success"
+
+        }
+    }
+    res.send({ ...couponData, amount: coupon?.discount_amount })
+})
+
+app.delete('/api/v1/coupons/:code', async (req, res) => {
+    try {
+        const code = req.params.code;
+        const query = { code };
+        const result = await couponsCollection.deleteOne(query)
+        res.send(result)
+    } catch (error) {
+        console.log(error.message);
+
+    }
 })
 
 // token creation
