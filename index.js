@@ -186,10 +186,35 @@ app.post('/api/v1/products/add-product', verifyToken, async (req, res) => {
     try {
         const product = req.body;
         product.status = 'pending'
+        product.upvote_count = 0;
         const result = await productsCollection.insertOne(product);
         res.send(result);
     } catch (error) {
 
+    }
+})
+
+// update product by productId by user
+app.patch('/api/v1/user/products/:productId', verifyToken, async (req, res) => {
+    try {
+        const productId = req.params.productId;
+        const query = { _id: new ObjectId(productId) }
+        const productData = req.body;
+        const updatedProduct = {};
+        const upVote = req.body?.upVote;
+        if (upVote) {
+            updatedProduct["$inc"] = {
+                upvote_count: 1
+            }
+        }
+        else {
+            updatedProduct['$set'] = productData;
+        }
+
+        const result = await productsCollection.updateOne(query, updatedProduct);
+        res.send(result);
+    } catch (error) {
+        console.log(error);
     }
 })
 
@@ -210,24 +235,7 @@ app.get('/api/v1/user/products/:email', verifyToken, async (req, res) => {
     }
 })
 
-// update product by productId by user
-app.patch('/api/v1/user/products/:productId', verifyToken, async (req, res) => {
-    try {
-        const productId = req.params.productId;
-        const query = { _id: new ObjectId(productId) }
-        const product = req.body;
-        const updatedProduct = {
-            $set: {
-                ...product,
-                status: 'pending',
-            }
-        }
-        const result = await productsCollection.updateOne(query, updatedProduct);
-        res.send(result);
-    } catch (error) {
-        console.log(error);
-    }
-})
+
 
 app.delete('/api/v1/user/products/:productId', verifyToken, async (req, res) => {
     try {
@@ -429,15 +437,36 @@ app.delete('/api/v1/reports/:productId', async (req, res) => {
 })
 
 // create a vote document for the user
-// app.post('/api/v1/votes', async (req, res) => {
-//     try {
-//         const vote = req.body;
-//         const result = await votesCollection.insertOne(vote);
-//         res.send(result);
-//     } catch (error) {
+app.post('/api/v1/votes', async (req, res) => {
+    try {
+        const vote = req.body;
+        console.log(vote);
+        const result = await votesCollection.insertOne(vote);
+        res.send(result);
+    } catch (error) {
 
-//     }
-// })
+    }
+})
+
+// to check logged in user upvote a particular product
+app.get('/api/v1/votes', verifyToken, async (req, res) => {
+    try {
+        const productId = req.query?.productId;
+        const email = req.query?.email;
+        const query = {};
+        if (productId && email) {
+            query.productId = productId;
+            query.email = email;
+            const result = await votesCollection.findOne(query);
+            res.send(result);
+        }
+        else {
+            res.status(403).send({ message: 'Forbidden Request' })
+        }
+    } catch (error) {
+
+    }
+})
 
 // app.get('/api/v1/votes/:productId', async (req, res) => {
 //     try {
@@ -450,7 +479,7 @@ app.delete('/api/v1/reports/:productId', async (req, res) => {
 // })
 
 // payment information to db
-app.post('/api/v1/payment', async (req, res) => {
+app.post('/api/v1/payment', verifyToken, async (req, res) => {
     try {
         const paymentDetails = req.body;
         const result = await paymentsCollection.insertOne(paymentDetails);
@@ -461,7 +490,7 @@ app.post('/api/v1/payment', async (req, res) => {
 })
 
 // get payment information by email address
-app.get('/api/v1/payment/:email', async (req, res) => {
+app.get('/api/v1/payment/:email', verifyToken, async (req, res) => {
     try {
         const email = req.params.email;
         const query = { email };
@@ -478,6 +507,7 @@ app.post('/api/v1/create-payment-intent', async (req, res) => {
     try {
         const { price } = req.body;
         const amount = parseInt(price * 100);
+        console.log(amount);
         if (!price || amount < 1) return res.status(500).send({ message: "Invalid payment intent" })
         const { client_secret } = await stripe.paymentIntents.create({
             amount,
@@ -537,17 +567,18 @@ app.get('/api/v1/coupons/:code', async (req, res) => {
         couponData.message = "Invalid coupon code"
     }
     else {
-        if (coupon.expire < new Date()) {
+        if (new Date(coupon.expiryDate) < new Date()) {
             couponData.valid = false;
             couponData.message = "Expired coupon code"
         }
         else {
             couponData.valid = true;
             couponData.message = "Success"
-
+            return res.send({ ...couponData, amount: coupon?.discount_amount })
         }
     }
-    res.send({ ...couponData, amount: coupon?.discount_amount })
+    res.send({ ...couponData })
+
 })
 
 app.delete('/api/v1/coupons/:code', async (req, res) => {
