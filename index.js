@@ -43,8 +43,6 @@ async function run() {
     }
 }
 run().catch(console.dir);
-
-
 const verifyToken = async (req, res, next) => {
     const token = req.cookies?.token;
     if (!token) {
@@ -75,14 +73,15 @@ const verifyAdmin = async (req, res, next) => {
         const { email } = req.user;
         const filter = { email };
         const user = await usersCollection.findOne(filter)
-        console.log(user);
+        console.log("admin ==========> ", user);
         if (user?.role === 'admin')
             next();
         else {
             return res.status(403).send({ message: 'Forbidden Access' })
         }
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 }
 
@@ -99,10 +98,10 @@ const verifyModerator = async (req, res, next) => {
             return res.status(403).send({ message: 'Forbidden Access' })
         }
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 }
-
 
 // save or modify user email and role in db
 app.put('/api/v1/users/:email', async (req, res) => {
@@ -136,50 +135,55 @@ app.put('/api/v1/users/:email', async (req, res) => {
                 timestamp: Date.now(),
             }
         }
-        console.log(updateDoc);
+
         const result = await usersCollection.updateOne(query, updateDoc, options);
         res.send(result)
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message)
+        res.status(500).send({ message: error.message })
     }
 })
 
 // get Products for normal users
 app.get('/api/v1/products', async (req, res) => {
-    const featured = req.query?.featured;
-    const sortBy = req.query?.sortBy;
-    const sortingOrder = req.query?.sortOrder;
-    const search = req.query?.search;
-    const page = req.query?.page
+    try {
+        const featured = req.query?.featured;
+        const sortBy = req.query?.sortBy;
+        const sortingOrder = req.query?.sortingOrder;
+        const search = req.query?.search;
+        const page = req.query?.page;
+        const sort = {};
+        let limit = 20;
 
-    const sort = {};
-    let limit = 20;
+        let skip = 0;
+        if (page) {
+            skip = page * 20;
+        }
+        const query = {
+            status: 'accepted'
+        }
+        if (sortBy && sortingOrder) {
+            sort[sortBy] = sortingOrder === 'desc' ? -1 : 1;
+            limit = 6
+        }
+        if (search) {
+            query.tags = {
+                $elemMatch: { text: { $regex: search, $options: "i" } }
+            }
+        }
 
-    let skip = 0;
-    if (page) {
-        skip = page * 20;
-    }
-    const query = {
-        status: 'accepted'
-    }
+        if (featured) {
+            query.featured = !!featured
+            limit = 4
+        }
 
-
-    if (sortBy && sortingOrder) {
-        sort[sortBy] = sortingOrder === 'desc' ? -1 : 1;
-        limit = 6
+        const result = await productsCollection.find(query).skip(skip).sort(sort).limit(limit).toArray();
+        const total = await productsCollection.countDocuments(query);
+        res.send({ result, total })
+    } catch (error) {
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
-    if (search) {
-        query.tags = { $regex: search, $options: "i" }
-    }
-    if (featured) {
-        query.featured = !!featured
-        limit = 4
-    }
-
-    const result = await productsCollection.find(query).skip(skip).sort(sort).limit(limit).toArray();
-    const total = await productsCollection.countDocuments(query);
-    res.send({ result, total })
 })
 // post a product
 app.post('/api/v1/products/add-product', verifyToken, async (req, res) => {
@@ -190,7 +194,8 @@ app.post('/api/v1/products/add-product', verifyToken, async (req, res) => {
         const result = await productsCollection.insertOne(product);
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -215,6 +220,7 @@ app.patch('/api/v1/user/products/:productId', verifyToken, async (req, res) => {
         res.send(result);
     } catch (error) {
         console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -224,14 +230,15 @@ app.patch('/api/v1/user/products/:productId', verifyToken, async (req, res) => {
 app.get('/api/v1/user/products/:email', verifyToken, async (req, res) => {
     try {
         const email = req.params.email;
-        console.log(email);
+
         const query = {
             'owner.email': email
         }
         const result = await productsCollection.find(query).toArray();
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -244,7 +251,8 @@ app.delete('/api/v1/user/products/:productId', verifyToken, async (req, res) => 
         const result = await productsCollection.deleteOne(query);
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -259,7 +267,8 @@ app.get('/api/v1/products/:id', async (req, res) => {
         const result = await productsCollection.findOne(query);
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 // get all products moderator api
@@ -295,34 +304,41 @@ app.get('/api/v1/moderator/products', verifyToken, verifyModerator, async (req, 
         ]).toArray();
         res.send(result)
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
 // update product info by moderator
 app.patch('/api/v1/moderator/products/:productId', verifyToken, verifyModerator, async (req, res) => {
-    const id = req.params.productId;
-    const featured = req.body?.featured;
-    const status = req.body?.status;
-    const updateDoc = {};
-    console.log(featured);
-    if (featured) {
-        updateDoc.featured = !!featured;
-    } if (status) {
-        updateDoc.status = status;
-        if (status === "accepted") {
-            updateDoc.timestamp = Date.now();
+    try {
+        const id = req.params.productId;
+        const featured = req.body?.featured;
+        const status = req.body?.status;
+        const updateDoc = {};
+
+        if (featured) {
+            updateDoc.featured = !!featured;
+        } if (status) {
+            updateDoc.status = status;
+            if (status === "accepted") {
+
+                updateDoc.timestamp = Date.now();
+            }
         }
-    }
-    console.log(updateDoc);
-    const updatedDoc = {
-        $set: {
-            ...updateDoc,
+
+        const updatedDoc = {
+            $set: {
+                ...updateDoc,
+            }
         }
+        const filter = { _id: new ObjectId(id) }
+        const result = await productsCollection.updateOne(filter, updatedDoc)
+        res.send(result)
+    } catch (error) {
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
-    const filter = { _id: new ObjectId(id) }
-    const result = await productsCollection.updateOne(filter, updatedDoc)
-    res.send(result)
 })
 
 
@@ -334,7 +350,8 @@ app.post('/api/v1/reviews', async (req, res) => {
         const result = await reviewsCollection.insertOne(review);
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -346,7 +363,8 @@ app.get('/api/v1/reviews/:productId', async (req, res) => {
         const result = await reviewsCollection.find(filter).toArray();
         res.send(result)
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -363,7 +381,8 @@ app.patch('/api/v1/users/:email', verifyToken, verifyAdmin, async (req, res) => 
         const result = await usersCollection.updateOne(filter, updateDoc);
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -371,13 +390,12 @@ app.patch('/api/v1/users/:email', verifyToken, verifyAdmin, async (req, res) => 
 app.get('/api/v1/user/:email', verifyToken, async (req, res) => {
     try {
         const query = req.params;
-        console.log(query);
         const result = await usersCollection.findOne(query);
-        console.log("result found ", result);
+        console.log("User found ", result.email);
         res.send(result);
     } catch (error) {
         console.log(error.message);
-        res.status(500).send(error.message)
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -387,7 +405,8 @@ app.get('/api/v1/users', verifyToken, verifyAdmin, async (req, res) => {
         const result = await usersCollection.find().toArray();
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -397,7 +416,8 @@ app.post('/api/v1/users/reports', verifyToken, async (req, res) => {
         const result = await reportsCollection.insertOne(data);
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -413,14 +433,13 @@ app.get('/api/v1/reports', verifyToken, async (req, res) => {
             query.email = reportedBy
             query.productId = productId
         }
-        console.log(query);
         const result = await reportsCollection.find(query).toArray();
-        console.log("result ", result);
         res.send(result);
 
 
     } catch (error) {
         console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -432,19 +451,26 @@ app.delete('/api/v1/reports/:productId', async (req, res) => {
         res.send(result)
 
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
 // create a vote document for the user
-app.post('/api/v1/votes', async (req, res) => {
+app.put('/api/v1/votes', async (req, res) => {
     try {
         const vote = req.body;
-        console.log(vote);
-        const result = await votesCollection.insertOne(vote);
+        const updatedDoc = {
+            $set: vote
+        }
+        const options = {
+            upsert: true,
+        }
+        const result = await votesCollection.updateOne(vote, updatedDoc, options);
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
@@ -452,7 +478,7 @@ app.post('/api/v1/votes', async (req, res) => {
 app.get('/api/v1/votes', verifyToken, async (req, res) => {
     try {
         const productId = req.query?.productId;
-        const email = req.query?.email;
+        const email = req.user?.email;
         const query = {};
         if (productId && email) {
             query.productId = productId;
@@ -464,19 +490,12 @@ app.get('/api/v1/votes', verifyToken, async (req, res) => {
             res.status(403).send({ message: 'Forbidden Request' })
         }
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
-// app.get('/api/v1/votes/:productId', async (req, res) => {
-//     try {
-//         const productId = req.params.productId
-//         const query = { productId };
 
-//     } catch (error) {
-
-//     }
-// })
 
 // payment information to db
 app.post('/api/v1/payment', verifyToken, async (req, res) => {
@@ -485,29 +504,18 @@ app.post('/api/v1/payment', verifyToken, async (req, res) => {
         const result = await paymentsCollection.insertOne(paymentDetails);
         res.send(result)
     } catch (error) {
-        res.status(500).send(error.message)
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
-// get payment information by email address
-app.get('/api/v1/payment/:email', verifyToken, async (req, res) => {
-    try {
-        const email = req.params.email;
-        const query = { email };
-        console.log(query);
-        const result = await paymentsCollection.findOne(query);
-        console.log(result);
-    } catch (error) {
 
-    }
-})
 
 // create a payment intent 
 app.post('/api/v1/create-payment-intent', async (req, res) => {
     try {
         const { price } = req.body;
         const amount = parseInt(price * 100);
-        console.log(amount);
         if (!price || amount < 1) return res.status(500).send({ message: "Invalid payment intent" })
         const { client_secret } = await stripe.paymentIntents.create({
             amount,
@@ -516,28 +524,50 @@ app.post('/api/v1/create-payment-intent', async (req, res) => {
         })
         res.send({ clientSecret: client_secret })
     } catch (error) {
-        res.status(500).send({ message: 'Internal Server error' })
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
+
+// Stats api
+app.get('/api/v1/pie-stats', async (req, res) => {
+    try {
+        const totalProducts = await productsCollection.estimatedDocumentCount();
+        const totalReviews = await reviewsCollection.estimatedDocumentCount();
+        const totalUsers = await usersCollection.estimatedDocumentCount();
+        res.send({ totalProducts, totalReviews, totalUsers })
+        // res.send([{ name: 'user', value: totalUsers }, { name: 'product', value: totalProducts }, { name: 'review', value: totalReviews }])
+    } catch (error) {
+        console.log(error);
+        res.status(500).send({ message: error.message })
+    }
+})
+
+
 
 // coupon apis
 
 app.put('/api/v1/coupons/:code', verifyToken, verifyAdmin, async (req, res) => {
-    const couponData = req.body;
-    const query = {
-        code: req.params?.code
-    }
-    const options = {
-        upsert: true,
-    }
-    const updateDoc = {
-        $set: {
-            ...couponData,
+    try {
+        const couponData = req.body;
+        const query = {
+            code: req.params?.code
         }
-    }
+        const options = {
+            upsert: true,
+        }
+        const updateDoc = {
+            $set: {
+                ...couponData,
+            }
+        }
 
-    const result = await couponsCollection.updateOne(query, updateDoc, options);
-    res.send(result)
+        const result = await couponsCollection.updateOne(query, updateDoc, options);
+        res.send(result)
+    } catch (error) {
+        console.log(error);
+        res.status(500).send({ message: error.message })
+    }
 })
 
 app.get('/api/v1/coupons', async (req, res) => {
@@ -553,31 +583,39 @@ app.get('/api/v1/coupons', async (req, res) => {
         ]).toArray();
         res.send(result);
     } catch (error) {
-
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
+
+
 app.get('/api/v1/coupons/:code', async (req, res) => {
-    const code = req.params.code;
-    const query = { code };
-    const couponData = {};
-    const coupon = await couponsCollection.findOne(query);
-    // coupon is not valid
-    if (!coupon) {
-        couponData.valid = false;
-        couponData.message = "Invalid coupon code"
-    }
-    else {
-        if (new Date(coupon.expiryDate) < new Date()) {
+    try {
+        const code = req.params.code;
+        const query = { code };
+        const couponData = {};
+        const coupon = await couponsCollection.findOne(query);
+        // coupon is not valid
+        if (!coupon) {
             couponData.valid = false;
-            couponData.message = "Expired coupon code"
+            couponData.message = "Invalid coupon code"
         }
         else {
-            couponData.valid = true;
-            couponData.message = "Success"
-            return res.send({ ...couponData, amount: coupon?.discount_amount })
+            if (new Date(coupon.expiryDate) < new Date()) {
+                couponData.valid = false;
+                couponData.message = "Expired coupon code"
+            }
+            else {
+                couponData.valid = true;
+                couponData.message = "Success"
+                return res.send({ ...couponData, amount: coupon?.discount_amount })
+            }
         }
+        res.send({ ...couponData })
+    } catch (error) {
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
-    res.send({ ...couponData })
 
 })
 
@@ -588,7 +626,8 @@ app.delete('/api/v1/coupons/:code', async (req, res) => {
         const result = await couponsCollection.deleteOne(query)
         res.send(result)
     } catch (error) {
-        console.log(error.message);
+        console.log(error);
+        res.status(500).send({ message: error.message })
 
     }
 })
@@ -609,29 +648,24 @@ app.post('/api/v1/create-token', async (req, res) => {
             })
             .send({ success: true })
     } catch (err) {
-        res.status(500).send(err)
+        console.log(error);
+        res.status(500).send({ message: error.message })
     }
 })
 
 
 // delete cookie
 app.post('/api/v1/delete-token', async (req, res) => {
-    try {
-        res
-            .clearCookie('token', {
-                maxAge: 0,
-                secure: true,
-                sameSite: 'none',
-            })
-            .send({ success: true })
-        console.log('Cookie cleared successful')
-    } catch (err) {
-        res.status(500).send(err)
-    }
+    res
+        .clearCookie('token', {
+            maxAge: 0,
+            secure: true,
+            sameSite: 'none',
+        })
+        .send({ success: true })
+    console.log('Cookie cleared successful')
+
 })
-
-
-
 
 app.get('/health', (req, res) => {
     res.send('Server health is good!💯💯💯');
