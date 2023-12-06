@@ -535,8 +535,30 @@ app.get('/api/v1/pie-stats', async (req, res) => {
         const totalProducts = await productsCollection.estimatedDocumentCount();
         const totalReviews = await reviewsCollection.estimatedDocumentCount();
         const totalUsers = await usersCollection.estimatedDocumentCount();
-        res.send({ totalProducts, totalReviews, totalUsers })
-        // res.send([{ name: 'user', value: totalUsers }, { name: 'product', value: totalProducts }, { name: 'review', value: totalReviews }])
+        const finalResult = {
+            series: [totalProducts, totalReviews, totalUsers],
+            labels: ['product', 'review', 'user']
+        }
+        res.send(
+            finalResult
+        )
+    } catch (error) {
+        console.log(error);
+        res.status(500).send({ message: error.message })
+    }
+})
+
+
+app.get('/api/v1/bar-chart', async (req, res) => {
+    try {
+        const subscribed = await paymentsCollection.estimatedDocumentCount();
+        const totalUsers = await usersCollection.estimatedDocumentCount();
+        const nonSubscribed = totalUsers - subscribed
+        const seriesData = [subscribed, nonSubscribed];
+
+        const result = { data: seriesData, categories: ['subscribed', 'non-subscribed'] }
+        console.log(result);
+        res.send(result);
     } catch (error) {
         console.log(error);
         res.status(500).send({ message: error.message })
