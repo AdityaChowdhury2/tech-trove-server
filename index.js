@@ -5,8 +5,10 @@ const cors = require('cors');
 require('dotenv').config();
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken')
+const http = require('http');
 const port = process.env.PORT || 5000;
 const stripe = require('stripe')(process.env.PAYMENT_SECRET)
+const socket = require('socket.io')
 
 app.use(cors({
     origin: [process.env.LOCAL_CLIENT, process.env.CLIENT],
@@ -15,6 +17,7 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+const server = http.createServer(app);
 
 let uri = "mongodb+srv://<username>:<password>@cluster0.ov0hmkn.mongodb.net/?retryWrites=true&w=majority";
 uri = uri.replace('<username>', process.env.DB_USER)
@@ -33,7 +36,7 @@ async function run() {
         // await client.connect();
         // Send a ping to confirm a successful connection
 
-        app.listen(port, (req, res) => {
+        server.listen(port, (req, res) => {
             console.log('Listening on port ' + port);
         })
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
@@ -529,6 +532,9 @@ app.post('/api/v1/create-payment-intent', async (req, res) => {
     }
 })
 
+
+
+
 // Stats api
 app.get('/api/v1/pie-stats', async (req, res) => {
     try {
@@ -539,6 +545,7 @@ app.get('/api/v1/pie-stats', async (req, res) => {
             series: [totalProducts, totalReviews, totalUsers],
             labels: ['product', 'review', 'user']
         }
+
         res.send(
             finalResult
         )
