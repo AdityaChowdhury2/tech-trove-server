@@ -8,16 +8,33 @@ const jwt = require('jsonwebtoken')
 const http = require('http');
 const port = process.env.PORT || 5000;
 const stripe = require('stripe')(process.env.PAYMENT_SECRET)
-const socket = require('socket.io')
+const { Server } = require('socket.io')
+const server = http.createServer(app);
+app.use(cors(
+    {
+        origin: [process.env.LOCAL_CLIENT, process.env.CLIENT],
+        credentials: true
+    }
+));
 
-app.use(cors({
-    origin: [process.env.LOCAL_CLIENT, process.env.CLIENT],
-    credentials: true
-}));
+
+
+const io = new Server(server,
+    {
+
+        cors: {
+            origin: ['localhost:5173', process.env.CLIENT, 'tech-trove-aditya.web.app'],
+            methods: ["GET", 'POST'],
+            credentials: true,
+            allowedHeaders: ["*"],
+        },
+
+    }
+)
+
 app.use(express.json());
 app.use(cookieParser());
 
-const server = http.createServer(app);
 
 let uri = "mongodb+srv://<username>:<password>@cluster0.ov0hmkn.mongodb.net/?retryWrites=true&w=majority";
 uri = uri.replace('<username>', process.env.DB_USER)
@@ -394,7 +411,7 @@ app.get('/api/v1/user/:email', verifyToken, async (req, res) => {
     try {
         const query = req.params;
         const result = await usersCollection.findOne(query);
-        console.log("User found ", result.email);
+        // console.log("User found ", result.email);
         res.send(result);
     } catch (error) {
         console.log(error.message);
@@ -450,7 +467,7 @@ app.delete('/api/v1/reports/:productId', async (req, res) => {
     try {
         const filter = { productId: req.params.productId }
         const result = await reportsCollection.deleteMany(filter);
-        console.log(result);
+        // console.log(result);
         res.send(result)
 
     } catch (error) {
@@ -532,12 +549,12 @@ app.post('/api/v1/create-payment-intent', async (req, res) => {
     }
 })
 
-
-
-
-// Stats api
-app.get('/api/v1/pie-stats', async (req, res) => {
-    try {
+io.on('connection', (socket) => {
+    // socket.on('join_room', (room) => {
+    //     console.log(`user with id ${socket.id} joined room ${room}`);
+    //     socket.join(room)
+    // })
+    socket.on('send-pie-chart', async (data) => {
         const totalProducts = await productsCollection.estimatedDocumentCount();
         const totalReviews = await reviewsCollection.estimatedDocumentCount();
         const totalUsers = await usersCollection.estimatedDocumentCount();
@@ -545,15 +562,32 @@ app.get('/api/v1/pie-stats', async (req, res) => {
             series: [totalProducts, totalReviews, totalUsers],
             labels: ['product', 'review', 'user']
         }
-
-        res.send(
-            finalResult
-        )
-    } catch (error) {
-        console.log(error);
-        res.status(500).send({ message: error.message })
-    }
+        const result = { finalResult, data };
+        // console.log(result, ' data');
+        io.emit('receive-pie-chart', result);
+    })
 })
+
+
+// Stats api
+// app.get('/api/v1/pie-stats', async (req, res) => {
+//     try {
+//         const totalProducts = await productsCollection.estimatedDocumentCount();
+//         const totalReviews = await reviewsCollection.estimatedDocumentCount();
+//         const totalUsers = await usersCollection.estimatedDocumentCount();
+//         const finalResult = {
+//             series: [totalProducts, totalReviews, totalUsers],
+//             labels: ['product', 'review', 'user']
+//         }
+
+//         res.send(
+//             finalResult
+//         )
+//     } catch (error) {
+//         console.log(error);
+//         res.status(500).send({ message: error.message })
+//     }
+// })
 
 
 app.get('/api/v1/bar-chart', async (req, res) => {

@@ -10,6 +10,10 @@
         {
             "src": "/(.*)",
             "dest": "index.js",
+            "headers": {
+                "Access-Control-Allow-Origin": "https://tech-trove-aditya.web.app",
+                "Access-Control-Allow-Credentials": "true"
+            },
             "methods": [
                 "GET",
                 "POST",
