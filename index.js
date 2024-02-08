@@ -23,7 +23,7 @@ const io = new Server(server,
     {
 
         cors: {
-            origin: ['localhost:5173', process.env.CLIENT, 'tech-trove-aditya.web.app'],
+            origin: [process.env.CLIENT, process.env.LOCAL_CLIENT],
             methods: ["GET", 'POST'],
             credentials: true,
             allowedHeaders: ["*"],
